@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shortest Path Spotlight: Dijkstra's Comparison</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for canvas and UI consistency */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc; /* Tailwind gray-100 */
+        }
+        canvas {
+            border: 2px solid #3b82f6; /* Tailwind blue-500 */
+            border-radius: 0.75rem; /* rounded-xl */
+            background-color: #ffffff;
+            touch-action: none; /* Prevent unwanted scrolling on touch devices */
+        }
+        .btn {
+            @apply px-4 py-2 font-semibold rounded-lg shadow-md transition duration-150 ease-in-out;
+        }
+        .btn-primary {
+            @apply bg-blue-600 text-white hover:bg-blue-700;
+        }
+        .btn-secondary {
+            @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+        }
+        .node-circle {
+            /* Basic style for nodes displayed in the legend/results */
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+        .algo-selector input:checked + label {
+            @apply bg-blue-600 text-white shadow-lg;
+        }
+        .result-card {
+            @apply p-4 border rounded-lg shadow-sm;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Shortest Path Spotlight</h1>
+        <p class="text-gray-600 mb-6">
+            Explore the Shortest Path Spotlight. Enter a custom graph, select the Start and End nodes, then run the visualization.
+        </p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- Canvas Area (2/3 width on large screens) -->
+            <div class="lg:col-span-2 shadow-xl rounded-xl overflow-hidden">
+                <canvas id="graphCanvas"></canvas>
+            </div>
+
+            <!-- Controls and Results Area (1/3 width on large screens) -->
+            <div class="lg:col-span-1 p-6 bg-white rounded-xl shadow-lg border border-gray-100 h-fit">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Controls & Status</h2>
+
+                <div class="space-y-4">
+                    
+                    <!-- Graph Input Section -->
+                    <div class="p-3 border rounded-lg bg-red-50">
+                        <p class="text-sm font-medium mb-2 text-red-700">1. Graph Input (JSON Adjacency List)</p>
+                        <textarea id="graphInput" rows="8" class="w-full p-2 text-xs font-mono border rounded-md focus:ring-red-500 focus:border-red-500">
+{
+  "A": {"B": 4, "C": 2, "G": 5},
+  "B": {"A": 4, "E": 3},
+  "C": {"A": 2, "D": 2, "F": 4},
+  "D": {"C": 2, "E": 3, "F": 1},
+  "E": {"B": 3, "D": 3, "G": 4},
+  "F": {"C": 4, "D": 1, "G": 2},
+  "G": {"F": 2, "A": 5, "E": 4, "H": 10},
+  "H": {"G": 10}
+}
+                        </textarea>
+                        <button id="loadGraphButton" class="btn btn-secondary w-full bg-red-500 text-white hover:bg-red-600 mt-2">
+                            Load Custom Graph
+                        </button>
+                    </div>
+
+
+                    <!-- Node Selection -->
+                    <div class="p-3 border rounded-lg bg-blue-50">
+                        <p class="text-sm font-medium mb-2">2. Select Nodes (Click on canvas)</p>
+                        <p id="startNodeDisplay" class="text-gray-700">Start Node: <span class="font-bold">-</span></p>
+                        <p id="endNodeDisplay" class="text-gray-700">End Node: <span class="font-bold">-</span></p>
+                    </div>
+                    
+                    <!-- Algorithm Selection -->
+                    <div class="p-3 border rounded-lg bg-indigo-50">
+                        <p class="text-sm font-medium mb-2">3. Algorithm Selector (Visualize)</p>
+                        <div class="flex space-x-2 algo-selector">
+                            <input type="radio" id="algoDijkstra" name="algorithm" value="Dijkstra" class="hidden" checked>
+                            <label for="algoDijkstra" class="btn btn-secondary flex-1 cursor-pointer text-center hover:bg-indigo-200">Dijkstra's (Weighted)</label>
+                            
+                            <input type="radio" id="algoBFS" name="algorithm" value="BFS" class="hidden">
+                            <label for="algoBFS" class="btn btn-secondary flex-1 cursor-pointer text-center hover:bg-indigo-200">BFS (Unweighted)</label>
+
+                            <input type="radio" id="algoAStar" name="algorithm" value="AStar" class="hidden">
+                            <label for="algoAStar" class="btn btn-secondary flex-1 cursor-pointer text-center hover:bg-indigo-200">A* Search (Heuristic)</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Speed Control -->
+                    <div class="p-3 border rounded-lg bg-gray-100">
+                        <p class="text-sm font-medium mb-2">4. Visualization Speed</p>
+                        <input type="range" id="speedSlider" min="100" max="2000" value="1000" step="100" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                        <p class="text-xs text-gray-500 mt-1" id="speedDisplay">1.0 seconds (Normal)</p>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <button id="runButton" class="btn btn-primary w-full" disabled>
+                        Run Visualization
+                    </button>
+                    <button id="resetButton" class="btn btn-secondary w-full">
+                        Reset Selections
+                    </button>
+                </div>
+
+                <div id="resultsArea" class="mt-6 border-t pt-4">
+                    <h3 class="text-lg font-semibold mb-3 text-gray-700">Path Comparison Results</h3>
+                    <p id="currentStatus" class="text-gray-900 font-bold text-lg mb-4">Ready to run...</p>
+
+                    <div id="comparisonDetails" class="space-y-4 mb-4">
+                        <!-- Results will be injected here -->
+                    </div>
+
+                </div>
+
+                <div class="mt-6 border-t pt-4">
+                    <h3 class="text-lg font-semibold mb-3 text-gray-700">Legend</h3>
+                    <div class="space-y-2 text-sm">
+                        <p><span class="node-circle bg-gray-500"></span> Unvisited Node</p>
+                        <p><span class="node-circle bg-blue-500"></span> Start Node / Updated Path</p>
+                        <p><span class="node-circle bg-yellow-400"></span> Currently Visiting (Current Node)</p>
+                        <p><span class="node-circle bg-red-600"></span> End Node</p>
+                        <p><span class="node-circle bg-green-500"></span> Shortest Path Found</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration and Initialization ---
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+        const NODE_RADIUS = 15;
+        let DELAY_MS = 1000; // Controlled by slider
+        const FONT = '14px Inter, sans-serif';
+
+        let startNode = null;
+        let endNode = null;
+        let isVisualizing = false;
+        let currentAlgorithm = 'Dijkstra';
+        
+        let currentGraph = {}; // Holds the active graph object (including positions)
+
+        // Stores the final calculated results for all three algorithms
+        let comparisonResults = {
+            Dijkstra: null,
+            BFS: null,
+            AStar: null
+        };
+        
+        // Utility to pause execution
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        // --- Layout and Graph Loading Functions ---
+
+        /**
+         * Converts a simple adjacency list graph into an object with calculated (x, y) coordinates
+         * using a circular layout algorithm.
+         * @param {Object} rawGraph - The graph structure from the user input (e.g., {"A": {"B": 4}}).
+         * @returns {Object} The complete graph object with coordinates.
+         */
+        function circularLayout(rawGraph) {
+            const nodeNames = Object.keys(rawGraph);
+            const numNodes = nodeNames.length;
+            if (numNodes === 0) return {};
+
+            // Define the center and radius based on canvas size
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            // Radius must be smaller than the smallest dimension
+            const radius = Math.min(centerX, centerY) * 0.75; 
+            
+            const newGraph = {};
+            
+            nodeNames.forEach((name, index) => {
+                const angle = (index / numNodes) * 2 * Math.PI; // Angle in radians
+                
+                newGraph[name] = {
+                    x: centerX + radius * Math.cos(angle),
+                    y: centerY + radius * Math.sin(angle),
+                    neighbors: rawGraph[name]
+                };
+            });
+            
+            return newGraph;
+        }
+
+        function parseAndLoadGraph() {
+            const inputElement = document.getElementById('graphInput');
+            const statusElement = document.getElementById('currentStatus');
+            const inputJson = inputElement.value.trim();
+
+            if (!inputJson) {
+                statusElement.textContent = "Error: Graph input cannot be empty.";
+                return;
+            }
+
+            try {
+                const rawGraph = JSON.parse(inputJson);
+                
+                // Basic validation: Check if it's an object and contains neighbor objects
+                if (typeof rawGraph !== 'object' || rawGraph === null || Array.isArray(rawGraph)) {
+                    statusElement.textContent = "Error: Invalid JSON format. Must be an object {node: {neighbor: weight}}.";
+                    return;
+                }
+                
+                // --- START FIX: Ensure Reciprocity (Undirected Graph) ---
+                const validatedGraph = {};
+
+                // Step 1: Initialize validatedGraph and enforce non-negative weights
+                for (const nodeA in rawGraph) {
+                    validatedGraph[nodeA] = validatedGraph[nodeA] || {};
+                    const neighbors = rawGraph[nodeA];
+                    
+                    for (const nodeB in neighbors) {
+                        let weight = neighbors[nodeB];
+                        
+                        // Validation: Check if weight is a non-negative number
+                        if (typeof weight !== 'number' || weight < 0) {
+                            statusElement.textContent = `Error: Edge weight for ${nodeA} to ${nodeB} must be a non-negative number.`;
+                            return;
+                        }
+                        validatedGraph[nodeA][nodeB] = weight;
+                    }
+                }
+
+                // Step 2: Enforce Reciprocity
+                for (const nodeA in validatedGraph) {
+                    for (const nodeB in validatedGraph[nodeA]) {
+                        const weight = validatedGraph[nodeA][nodeB];
+                        
+                        // Ensure the reverse link exists with the same weight
+                        validatedGraph[nodeB] = validatedGraph[nodeB] || {};
+                        validatedGraph[nodeB][nodeA] = weight;
+                    }
+                }
+                // --- END FIX ---
+                
+                // Apply layout to the validated graph
+                currentGraph = circularLayout(validatedGraph);
+                
+                // If graph is loaded successfully, reset state
+                resetState();
+                statusElement.textContent = `Graph loaded successfully with ${Object.keys(currentGraph).length} nodes! Ready to select nodes.`;
+
+            } catch (error) {
+                console.error("Graph Parsing Error:", error);
+                statusElement.textContent = `Error: Could not parse graph. Please check JSON syntax (e.g., missing quotes/commas).`;
+            }
+        }
+
+        // --- UI Update Functions ---
+        function updateUI() {
+            document.getElementById('startNodeDisplay').innerHTML = `Start Node: <span class="font-bold text-blue-600">${startNode || '-'}</span>`;
+            document.getElementById('endNodeDisplay').innerHTML = `End Node: <span class="font-bold text-red-600">${endNode || '-'}</span>`;
+
+            const runButton = document.getElementById('runButton');
+            runButton.disabled = !startNode || !endNode || isVisualizing || Object.keys(currentGraph).length === 0;
+            runButton.textContent = isVisualizing ? 'Visualizing...' : `Run ${currentAlgorithm}'s Visualization`;
+        }
+
+        function resetState() {
+            // Reset node selections first
+            startNode = null;
+            endNode = null;
+            
+            // Then reset visualization status
+            isVisualizing = false;
+            comparisonResults = { Dijkstra: null, BFS: null, AStar: null };
+            
+            document.getElementById('currentStatus').textContent = "Select Start and End nodes on the canvas.";
+            document.getElementById('comparisonDetails').innerHTML = "";
+
+            setupCanvas();
+            drawGraph();
+            updateUI();
+        }
+
+        // --- Canvas Drawing Functions ---
+
+        function setupCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = 500; // Increased height for better circular layout spread
+            
+            // Recalculate layout on resize to ensure graph fits
+            if (Object.keys(currentGraph).length > 0) {
+                const rawGraph = {};
+                for (const name in currentGraph) {
+                    rawGraph[name] = currentGraph[name].neighbors;
+                }
+                currentGraph = circularLayout(rawGraph);
+            }
+        }
+
+        function drawGraph(highlightNode = null, settledNodes = new Set(), currentEdge = null, finalPath = []) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (Object.keys(currentGraph).length === 0) {
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '20px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText("Load a graph above to begin.", canvas.width / 2, canvas.height / 2);
+                return;
+            }
+            
+            // 1. Draw Edges
+            ctx.lineWidth = 2;
+            ctx.font = '12px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const nodesArray = Object.keys(currentGraph);
+            nodesArray.forEach((nodeName) => {
+                const node = currentGraph[nodeName];
+                
+                // Sort neighbor names to ensure consistent drawing order for undirected graph
+                const neighborNames = Object.keys(node.neighbors).sort();
+                
+                neighborNames.forEach((neighborName) => {
+                    const weight = node.neighbors[neighborName];
+                    const neighbor = currentGraph[neighborName];
+                    
+                    // Only draw if nodeName comes before neighborName alphabetically (prevents double drawing since reciprocity is now guaranteed)
+                    if (nodeName < neighborName) { 
+                        
+                        let lineColor = '#ccc';
+                        
+                        // Check if the edge is part of the final shortest path trace
+                        const idx1 = finalPath.indexOf(nodeName);
+                        const idx2 = finalPath.indexOf(neighborName);
+
+                        if (idx1 !== -1 && idx2 !== -1 && Math.abs(idx1 - idx2) === 1) {
+                            lineColor = '#10b981'; // Final Path Edge
+                        } 
+                        else if (currentEdge && ((currentEdge.from === nodeName && currentEdge.to === neighborName) || (currentEdge.from === neighborName && currentEdge.to === nodeName))) {
+                            lineColor = '#f59e0b'; // Current Edge being checked
+                        }
+                        
+                        ctx.strokeStyle = lineColor;
+                        ctx.beginPath();
+                        ctx.moveTo(node.x, node.y);
+                        ctx.lineTo(neighbor.x, neighbor.y);
+                        ctx.stroke();
+
+                        // Draw weight text 
+                        const midX = (node.x + neighbor.x) / 2;
+                        const midY = (node.y + neighbor.y) / 2;
+                        
+                        // Small offset for visibility
+                        const angle = Math.atan2(neighbor.y - node.y, neighbor.x - node.x);
+                        const offset = 15; 
+                        const textX = midX - offset * Math.sin(angle);
+                        const textY = midY + offset * Math.cos(angle);
+
+                        // Draw background box for weight
+                        ctx.fillStyle = '#ffffff'; 
+                        ctx.fillRect(textX - 10, textY - 10, 20, 20); 
+
+                        // Draw weight
+                        ctx.fillStyle = lineColor === '#ccc' ? '#4b5563' : lineColor;
+                        ctx.fillText(weight.toString(), textX, textY + 1);
+                    }
+                });
+            });
+
+            // 2. Draw Nodes
+            let distancesToDraw = comparisonResults[currentAlgorithm]?.distances || {};
+            
+            ctx.font = FONT;
+            nodesArray.forEach((nodeName) => {
+                const node = currentGraph[nodeName];
+                
+                let fillColor = '#6b7280'; // Default gray-500 (Unvisited)
+                let strokeColor = '#374151'; 
+                
+                if (settledNodes.has(nodeName)) {
+                    fillColor = '#3b82f6'; // Settled/Visited
+                }
+                if (nodeName === highlightNode) {
+                    fillColor = '#f59e0b'; // Current
+                }
+                if (nodeName === startNode) {
+                    fillColor = '#3b82f6'; // Start
+                }
+                if (nodeName === endNode) {
+                    fillColor = '#dc2626'; // End
+                }
+                if (finalPath.includes(nodeName) && nodeName !== startNode && nodeName !== endNode) {
+                    fillColor = '#10b981'; // Path
+                }
+
+                // Draw Circle
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = fillColor;
+                ctx.fill();
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Draw Node Name (Letter)
+                ctx.fillStyle = (fillColor === '#6b7280' || fillColor === '#f59e0b') ? '#000000' : '#ffffff';
+                ctx.fillText(nodeName, node.x, node.y + 1);
+                
+                // Draw Distance Label (only during visualization)
+                if (isVisualizing && distancesToDraw) {
+                    const dist = distancesToDraw[nodeName];
+                    if (dist !== undefined) {
+                        const distText = dist === Infinity ? '∞' : dist.toString();
+                        ctx.fillStyle = '#000000';
+                        ctx.font = '10px Inter, sans-serif';
+                        
+                        let label;
+                        if (currentAlgorithm === 'Dijkstra' || currentAlgorithm === 'AStar') {
+                             label = `D: ${distText}`; // Actual cumulative distance (g(n))
+                        } else {
+                            label = `Depth: ${distText}`; // BFS depth
+                        }
+                        ctx.fillText(label, node.x, node.y - NODE_RADIUS - 5);
+                    }
+                }
+            });
+        }
+
+        // --- Core Algorithm Logic (Non-Visual) ---
+
+        function findMinDistanceNode(dist, unvisited) {
+            let minDistance = Infinity;
+            let minNode = null;
+            for (const node in dist) {
+                if (!unvisited.has(node) && dist[node] < minDistance) {
+                    minDistance = dist[node];
+                    minNode = node;
+                }
+            }
+            return minNode;
+        }
+        
+        // --- A* specific helper: Euclidean Distance Heuristic (h(n)) ---
+        function calculateHeuristic(nodeName, endNodeName) {
+            if (nodeName === endNodeName) return 0;
+            const node = currentGraph[nodeName];
+            const end = currentGraph[endNodeName];
+            
+            // If coordinates are missing (shouldn't happen with circularLayout), return 0
+            if (!node || !end) return 0; 
+            
+            // Euclidean distance (straight line distance on the canvas)
+            const dx = node.x - end.x;
+            const dy = node.y - end.y;
+            return Math.sqrt(dx * dx + dy * dy) * 0.05; // Scaling factor to make heuristic relevant
+        }
+
+        function tracePath(paths, start, end) {
+            let path = [];
+            let currentPathNode = end;
+            
+            if (paths[end] === undefined && end !== start) return []; // Unreachable
+
+            while (currentPathNode !== null) {
+                path.unshift(currentPathNode);
+                if (currentPathNode === start) break; // Path trace finished
+                
+                currentPathNode = paths[currentPathNode];
+                if (currentPathNode === undefined) {
+                    path = [];
+                    break;
+                }
+            }
+            return path.includes(start) ? path : []; // Only return if path starts at startNode
+        }
+
+        function calculateDijkstra() {
+            let distances = {}; // g(n): cost from start to node n
+            let paths = {};
+            let steps = [];
+            let visited = new Set();
+            let unvisitedSet = new Set(Object.keys(currentGraph));
+
+            Object.keys(currentGraph).forEach(node => { distances[node] = Infinity; paths[node] = null; });
+            distances[startNode] = 0;
+            steps.push({ current: null, distances: { ...distances }, settledNodes: new Set() });
+
+            while (unvisitedSet.size > 0) {
+                const current = findMinDistanceNode(distances, visited);
+                if (!current || distances[current] === Infinity) break; 
+                
+                visited.add(current);
+                unvisitedSet.delete(current);
+                steps.push({ current: current, distances: { ...distances }, settledNodes: new Set(visited) });
+
+                if (current === endNode) break;
+
+                const neighbors = currentGraph[current].neighbors;
+                for (const neighbor in neighbors) {
+                    if (!visited.has(neighbor)) { 
+                        const weight = neighbors[neighbor];
+                        const newDistance = distances[current] + weight;
+                        
+                        if (newDistance < distances[neighbor]) {
+                            distances[neighbor] = newDistance;
+                            paths[neighbor] = current;
+                            steps.push({
+                                current: current, distances: { ...distances }, settledNodes: new Set(visited),
+                                edge: { from: current, to: neighbor }, message: `Dijkstra: Updated distance to ${neighbor}: ${newDistance}.`
+                            });
+                        }
+                    }
+                }
+            }
+
+            const finalPath = tracePath(paths, startNode, endNode);
+            const totalWeight = distances[endNode] === Infinity ? 'Unreachable' : distances[endNode];
+            
+            return {
+                path: finalPath,
+                totalWeight: totalWeight,
+                totalEdges: finalPath.length > 0 ? finalPath.length - 1 : 0,
+                distances: distances,
+                steps: steps
+            };
+        }
+
+        function calculateBFS() {
+            // ... (BFS logic remains the same)
+            let distances = {};
+            let paths = {};
+            let steps = [];
+            let visited = new Set();
+            let queue = [startNode];
+
+            Object.keys(currentGraph).forEach(node => { distances[node] = Infinity; paths[node] = null; });
+            distances[startNode] = 0;
+            visited.add(startNode);
+            steps.push({ current: null, distances: { ...distances }, settledNodes: new Set(visited) });
+
+            let head = 0;
+            while (head < queue.length) {
+                const current = queue[head++];
+                steps.push({ current: current, distances: { ...distances }, settledNodes: new Set(visited) });
+
+                if (current === endNode) break;
+
+                for (const neighbor of Object.keys(currentGraph[current].neighbors)) {
+                    if (!visited.has(neighbor)) {
+                        visited.add(neighbor);
+                        distances[neighbor] = distances[current] + 1; // Depth (unweighted distance)
+                        paths[neighbor] = current;
+                        queue.push(neighbor);
+                        steps.push({
+                            current: current, distances: { ...distances }, settledNodes: new Set(visited),
+                            edge: { from: current, to: neighbor }, message: `BFS: Found ${neighbor} at Depth ${distances[neighbor]}.`
+                        });
+                    }
+                }
+            }
+            
+            const finalPath = tracePath(paths, startNode, endNode);
+            const totalEdges = distances[endNode] === Infinity ? 'Unreachable' : distances[endNode];
+            
+            let totalWeight = 0;
+            let pathFound = finalPath.length > 0;
+            
+            if (pathFound) {
+                for(let i = 0; i < finalPath.length - 1; i++) {
+                    const nodeA = finalPath[i];
+                    const nodeB = finalPath[i+1];
+                    totalWeight += currentGraph[nodeA].neighbors[nodeB] || Infinity;
+                }
+            }
+
+            return {
+                path: finalPath,
+                totalWeight: pathFound ? totalWeight : 'Unreachable',
+                totalEdges: totalEdges,
+                distances: distances,
+                steps: steps
+            };
+        }
+
+        function calculateAStar() {
+            let gScore = {}; // g(n): cost from start to current node (Dijkstra's distance)
+            let fScore = {}; // f(n) = g(n) + h(n): estimated total cost
+            let paths = {};
+            let steps = [];
+            let visited = new Set();
+            let openSet = new Set(Object.keys(currentGraph));
+
+            Object.keys(currentGraph).forEach(node => { 
+                gScore[node] = Infinity; 
+                fScore[node] = Infinity; 
+                paths[node] = null; 
+            });
+            
+            gScore[startNode] = 0;
+            fScore[startNode] = calculateHeuristic(startNode, endNode);
+            
+            // A* steps track the gScore (Dijkstra's actual distance)
+            steps.push({ current: null, distances: { ...gScore }, settledNodes: new Set() });
+
+            while (openSet.size > 0) {
+                // Find the node in openSet with the lowest fScore
+                let minFScore = Infinity;
+                let current = null;
+                
+                for (const node of openSet) {
+                    if (fScore[node] < minFScore) {
+                        minFScore = fScore[node];
+                        current = node;
+                    }
+                }
+
+                if (!current || fScore[current] === Infinity) break; 
+                
+                openSet.delete(current);
+                visited.add(current);
+                
+                steps.push({ current: current, distances: { ...gScore }, settledNodes: new Set(visited), 
+                            message: `A*: Processing Node ${current}. Estimated cost (fScore): ${minFScore.toFixed(2)}` });
+
+                if (current === endNode) break;
+
+                const neighbors = currentGraph[current].neighbors;
+                for (const neighbor in neighbors) {
+                    if (visited.has(neighbor)) continue; // Already evaluated
+
+                    const weight = neighbors[neighbor];
+                    // tentative_gScore is the distance from start through the current node
+                    const tentative_gScore = gScore[current] + weight;
+                    
+                    if (tentative_gScore < gScore[neighbor]) {
+                        // This path to neighbor is better than any previous one. Record it.
+                        paths[neighbor] = current;
+                        gScore[neighbor] = tentative_gScore;
+                        fScore[neighbor] = gScore[neighbor] + calculateHeuristic(neighbor, endNode);
+                        
+                        if (!openSet.has(neighbor)) {
+                            openSet.add(neighbor);
+                        }
+                        
+                        steps.push({
+                            current: current, distances: { ...gScore }, settledNodes: new Set(visited),
+                            edge: { from: current, to: neighbor }, message: `A*: Updated gScore for ${neighbor}: ${gScore[neighbor]}.`
+                        });
+                    }
+                }
+            }
+
+            const finalPath = tracePath(paths, startNode, endNode);
+            const totalWeight = gScore[endNode] === Infinity ? 'Unreachable' : gScore[endNode];
+            
+            return {
+                path: finalPath,
+                totalWeight: totalWeight,
+                totalEdges: finalPath.length > 0 ? finalPath.length - 1 : 0,
+                distances: gScore, // Display the actual distance (gScore)
+                steps: steps
+            };
+        }
+        
+        // --- Visualization and UI Display ---
+
+        function displayComparisonResults() {
+            const container = document.getElementById('comparisonDetails');
+            container.innerHTML = '';
+
+            if (!comparisonResults.Dijkstra && !comparisonResults.BFS && !comparisonResults.AStar) return;
+
+            // Define the algorithms in the order we want to display them
+            const algorithms = ['Dijkstra', 'AStar', 'BFS'];
+            
+            // Get the best *weighted* result to highlight the optimal path
+            const weightedOptimal = comparisonResults.Dijkstra?.totalWeight;
+
+            algorithms.forEach(algoName => {
+                const result = comparisonResults[algoName];
+                if (!result) return;
+                
+                const isWeighted = algoName !== 'BFS';
+                const pathStr = result.path.length > 0 ? result.path.join(' &rarr; ') : 'No path found.';
+
+                const totalEdges = result.totalEdges === 'Unreachable' ? 'N/A' : result.totalEdges;
+                const totalWeight = result.totalWeight === 'Unreachable' ? 'N/A' : result.totalWeight;
+                
+                let resultClass = 'bg-white border-blue-200';
+                let header = `${algoName}'s Result`;
+
+                // Highlight if the path is the overall weighted optimal path
+                if (isWeighted && result.path.length > 0 && totalWeight !== 'N/A' && 
+                    totalWeight === weightedOptimal) {
+                    resultClass = 'bg-green-100 border-green-500';
+                    header = `${algoName}'s Result (Weighted Optimal)`;
+                } else if (algoName === 'AStar') {
+                    // A* specific styling
+                     resultClass = 'bg-purple-100 border-purple-500';
+                }
+
+
+                const cardHtml = `
+                    <div class="result-card ${resultClass}">
+                        <h4 class="font-bold text-lg mb-2 ${isWeighted ? 'text-blue-700' : 'text-indigo-700'}">${header}</h4>
+                        <p class="text-sm font-semibold">Total Weight: <span class="text-base">${totalWeight}</span></p>
+                        <p class="text-sm text-gray-500 mb-2">Total Edges (Hops): ${totalEdges}</p>
+                        <p class="text-xs break-words">Path: <span class="font-mono">${pathStr}</span></p>
+                    </div>
+                `;
+                container.innerHTML += cardHtml;
+            });
+        }
+
+
+        async function animateAlgorithm() {
+            if (!startNode || !endNode) return;
+
+            isVisualizing = true;
+            updateUI();
+            
+            // Calculate all algorithms instantly for comparison results
+            document.getElementById('currentStatus').textContent = "Calculating all shortest paths (instantaneous)...";
+            comparisonResults.Dijkstra = calculateDijkstra();
+            comparisonResults.BFS = calculateBFS();
+            comparisonResults.AStar = calculateAStar();
+            
+            displayComparisonResults();
+
+            const selectedAlgo = currentAlgorithm;
+            const finalResults = comparisonResults[selectedAlgo];
+            const steps = finalResults.steps;
+            const finalPath = finalResults.path;
+
+            document.getElementById('currentStatus').textContent = `Visualizing ${selectedAlgo}'s execution...`;
+            
+            for (let i = 0; i < steps.length; i++) {
+                const step = steps[i];
+                
+                drawGraph(step.current, step.settledNodes, step.edge, []);
+                
+                let statusMsg = step.message || `${selectedAlgo}: Processing Node ${step.current || startNode}...`;
+                document.getElementById('currentStatus').textContent = statusMsg;
+
+                await sleep(DELAY_MS); // Use the variable DELAY_MS
+            }
+
+            const lastStepSettledNodes = steps[steps.length - 1]?.settledNodes || new Set();
+            drawGraph(null, lastStepSettledNodes, null, finalPath);
+            document.getElementById('currentStatus').textContent = finalResults.message || `${selectedAlgo} completed. See comparison results above.`;
+
+
+            isVisualizing = false;
+            updateUI(); 
+        }
+
+        // --- Event Handlers ---
+
+        function handleAlgorithmChange(event) {
+            currentAlgorithm = event.target.value;
+            
+            if (comparisonResults.Dijkstra) {
+                displayComparisonResults();
+                const finalPath = comparisonResults[currentAlgorithm]?.path || [];
+                const steps = comparisonResults[currentAlgorithm]?.steps || [];
+                const settledNodes = steps[steps.length - 1]?.settledNodes || new Set();
+                drawGraph(null, settledNodes, null, finalPath);
+                document.getElementById('currentStatus').textContent = `${currentAlgorithm} completed. Select 'Run Visualization' to see animation.`;
+            } else {
+                // Only redraw if a graph is loaded
+                if (Object.keys(currentGraph).length > 0) {
+                    drawGraph();
+                    document.getElementById('currentStatus').textContent = "Select Start and End nodes on the canvas.";
+                } else {
+                    document.getElementById('currentStatus').textContent = "Load a graph to begin.";
+                }
+            }
+            updateUI();
+        }
+        
+        function handleSpeedChange(event) {
+            DELAY_MS = parseInt(event.target.value);
+            const display = document.getElementById('speedDisplay');
+            const seconds = (DELAY_MS / 1000).toFixed(1);
+            let speedText = '';
+
+            if (DELAY_MS < 500) {
+                speedText = `(${seconds} seconds - Fast)`;
+            } else if (DELAY_MS <= 1000) {
+                speedText = `(${seconds} seconds - Normal)`;
+            } else {
+                speedText = `(${seconds} seconds - Slow)`;
+            }
+            display.textContent = seconds + ' seconds ' + speedText;
+        }
+
+
+        function handleCanvasClick(event) {
+            // Stop propagation to prevent potential interference from parent elements
+            event.stopPropagation();
+            
+            if (isVisualizing || Object.keys(currentGraph).length === 0) return;
+
+            // Use offsetX and offsetY which are relative to the canvas padding edge for better accuracy
+            const clickX = event.offsetX;
+            const clickY = event.offsetY;
+
+            // Use a large tolerance (30 pixels) to make clicking easier
+            const CLICK_TOLERANCE = NODE_RADIUS * 2; 
+
+            for (const nodeName in currentGraph) {
+                const node = currentGraph[nodeName];
+                const distance = Math.sqrt((node.x - clickX) ** 2 + (node.y - clickY) ** 2);
+
+                if (distance < CLICK_TOLERANCE) {
+                    // Node found
+                    if (!startNode) {
+                        startNode = nodeName;
+                    } else if (nodeName === startNode) {
+                        startNode = null;
+                    } else if (!endNode) {
+                        endNode = nodeName;
+                    } else if (nodeName === endNode) {
+                        endNode = null;
+                    } else {
+                        // If both are selected, clicking a new node selects it as the end node
+                        endNode = nodeName;
+                    }
+                    
+                    // Reset calculation results when nodes change
+                    comparisonResults = { Dijkstra: null, BFS: null, AStar: null };
+                    document.getElementById('comparisonDetails').innerHTML = "";
+                    
+                    // Explicitly draw and update UI for immediate feedback
+                    drawGraph();
+                    updateUI();
+                    return;
+                }
+            }
+        }
+        
+        // --- Initialization on Load ---
+        window.onload = () => {
+            setupCanvas();
+            document.getElementById('loadGraphButton').addEventListener('click', parseAndLoadGraph);
+            document.getElementById('runButton').addEventListener('click', animateAlgorithm);
+            document.getElementById('resetButton').addEventListener('click', resetState);
+            document.getElementById('speedSlider').addEventListener('input', handleSpeedChange);
+            
+            document.querySelectorAll('input[name="algorithm"]').forEach(radio => {
+                radio.addEventListener('change', handleAlgorithmChange);
+            });
+            
+            canvas.addEventListener('click', handleCanvasClick);
+            
+            window.addEventListener('resize', () => {
+                setupCanvas();
+                drawGraph();
+            });
+            
+            // Load the default graph on initial load
+            parseAndLoadGraph();
+        };
+    </script>
+</body>
+</html>
